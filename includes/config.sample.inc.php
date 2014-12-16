@@ -26,6 +26,7 @@ $config = array(
       'filter'    => 'something:*', // Show only parts of database for speed or security reasons.
       'seperator' => '/',           // Use a different seperator on this database.
       'flush'     => false,         // Set to true to enable the flushdb button for this instance.
+      'mode'      => 'read-only'    // Set to 'read-only' to disable the 'edit','delete','create','flushdb'.
       'charset'   => 'cp1251',      // Keys and values are stored in redis using this encoding (default utf-8).
     ),*/
   ),
