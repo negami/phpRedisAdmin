@@ -101,7 +101,7 @@ if (isset($values) && ($count_elements_page !== false)) {
             <td>
                 <div><?php echo ($ttl == -1) ? 'does not expire' : $ttl ?>
                     <?php if ($server['mode'] !== 'read-only'): ?>
-                    <a href="<?php echo sprintf('ttl.php?s=%s&amp;key=%s&amp;ttl=%s', $server['id'], urlencode($_GET['key'], $ttl)); ?>">
+                    <a href="<?php echo sprintf('ttl.php?s=%s&amp;key=%s&amp;ttl=%s', $server['id'], urlencode($_GET['key']), $ttl); ?>">
                         <img src="images/edit.png" width="16" height="16" title="Edit TTL" alt="[E]" class="imgbut">
                     </a>
                     <?php endif; ?>
