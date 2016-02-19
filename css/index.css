@@ -3,7 +3,7 @@ position: absolute;
 top: 0;
 bottom: 0;
 left: 0;
-width: 24em;
+width: 30em;
 height: 100%;
 padding-left: 1em;
 border-right: 1px solid #000;
@@ -27,7 +27,7 @@ text-decoration: underline;
 position: fixed;
 top: 18.5em;
 bottom: 0;
-width: 24em;
+width: 30em;
 padding-bottom: 1em;
 overflow: auto;
 }
@@ -108,7 +108,7 @@ display: inline;
 #frame {
 position: fixed;
 top: 0;
-left: 25em;
+left: 31em;
 right: 0;
 bottom: 0;
 padding-left: 1em;
