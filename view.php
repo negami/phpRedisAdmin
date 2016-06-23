@@ -1,16 +1,24 @@
 <?php
+
 require_once 'includes/common.inc.php';
 
 $page['css'][] = 'frame';
-$page['js'][] = 'frame';
+$page['js'][]  = 'frame';
 
 require 'includes/header.inc.php';
 
+
+
 if (!isset($_GET['key'])) {
-    echo 'Invalid key' . PHP_EOL;
-    require 'includes/footer.inc.php';
-    die;
+  ?>
+  Invalid key
+  <?php
+
+  require 'includes/footer.inc.php';
+  die;
 }
+
+
 
 $type   = $redis->type($_GET['key']);
 $exists = $redis->exists($_GET['key']);
@@ -18,118 +26,104 @@ $exists = $redis->exists($_GET['key']);
 $count_elements_page = isset($config['count_elements_page']) ? $config['count_elements_page'] : false;
 $page_num_request    = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $page_num_request    = $page_num_request === 0 ? 1 : $page_num_request;
+
+
+
 ?>
-<h2><?php echo format_html($_GET['key']) ?>
-    <?php if ($exists): ?>
-        <?php if ($server['mode'] !== 'read-only'): ?>
-        <a href="<?php echo sprintf('rename.php?s=%s&amp;key=%s', $server['id'], urlencode($_GET['key'])); ?>">
-            <img src="images/edit.png" width="16" height="16" title="Rename" alt="[R]">
-        </a>
-        <a href="<?php echo sprintf('delete.php?s=%s&amp;key=%s', $server['id'], urlencode($_GET['key'])); ?>" class="delkey">
-            <img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]">
-        </a>
-        <?php endif; ?>
-    <a href="<?php echo sprintf('export.php?s=%s&amp;key=%s', $server['id'], urlencode($_GET['key'])); ?>">
-        <img src="images/export.png" width="16" height="16" title="Export" alt="[E]">
-    </a>
-    <?php endif; ?>
+<h2><?php echo format_html($_GET['key'])?>
+<?php if ($exists && !$server['is_read_only']) { ?>
+  <a href="rename.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;key=<?php echo urlencode($_GET['key'])?>"><img src="images/edit.png" width="16" height="16" title="Rename" alt="[R]"></a>
+  <a href="delete.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;key=<?php echo urlencode($_GET['key'])?>" class="delkey"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
+  <a href="export.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;key=<?php echo urlencode($_GET['key'])?>"><img src="images/export.png" width="16" height="16" title="Export" alt="[E]"></a>
+<?php } ?>
 </h2>
 <?php
 
 if (!$exists) {
-    echo 'This key does not exist.' . PHP_EOL;
-    require 'includes/footer.inc.php';
-    die;
+  ?>
+  This key does not exist.
+  <?php
+
+  require 'includes/footer.inc.php';
+  die;
 }
 
-$alt = false;
-$ttl = $redis->ttl($_GET['key']);
+
+
+$alt      = false;
+$ttl      = $redis->ttl($_GET['key']);
 
 try {
-    $encoding = $redis->object('encoding', $_GET['key']);
+  $encoding = $redis->object('encoding', $_GET['key']);
 } catch (Exception $e) {
-    $encoding = null;
+  $encoding = null;
 }
 
 
 switch ($type) {
-    case 'string':
-        $value = $redis->get($_GET['key']);
-        $size = strlen($value);
-        break;
+  case 'string':
+    $value = $redis->get($_GET['key']);
+    $value = encodeOrDecode('load', $_GET['key'], $value);
+    $size  = strlen($value);
+    break;
 
-    case 'hash':
-        $values = $redis->hGetAll($_GET['key']);
-        $size = count($values);
-        break;
+  case 'hash':
+    $values = $redis->hGetAll($_GET['key']);
+    foreach ($values as $k => $value) {
+      $values[$k] = encodeOrDecode('load', $_GET['key'], $value);
+    }
+    $size = count($values);
+    ksort($values);
+    break;
 
-    case 'list':
-        $size = $redis->lLen($_GET['key']);
-        break;
+  case 'list':
+    $size = $redis->lLen($_GET['key']);
+    break;
 
-    case 'set':
-        $values = $redis->sMembers($_GET['key']);
-        $size = count($values);
-        break;
+  case 'set':
+    $values = $redis->sMembers($_GET['key']);
+    foreach ($values as $k => $value) {
+      $values[$k] = encodeOrDecode('load', $_GET['key'], $value);
+    }
+    $size = count($values);
+    sort($values);
+    break;
 
-    case 'zset':
-        $values = $redis->zRange($_GET['key'], 0, -1);
-        $size = count($values);
-        break;
+  case 'zset':
+    $values = $redis->zRange($_GET['key'], 0, -1);
+    foreach ($values as $k => $value) {
+      $values[$k] = encodeOrDecode('load', $_GET['key'], $value);
+    }
+    $size = count($values);
+    break;
 }
-
+  
 if (isset($values) && ($count_elements_page !== false)) {
-    $values = array_slice($values, $count_elements_page * ($page_num_request - 1), $count_elements_page, true);
+  $values = array_slice($values, $count_elements_page * ($page_num_request - 1), $count_elements_page,true);
 }
 
 ?>
-    <table>
+<table>
 
-        <tr>
-            <td>
-                <div>Type:</div>
-            </td>
-            <td>
-                <div><?php echo format_html($type) ?></div>
-            </td>
-        </tr>
+<tr><td><div>Type:</div></td><td><div><?php echo format_html($type)?></div></td></tr>
 
-        <tr>
-            <td>
-                <div><abbr title="Time To Live">TTL</abbr>:</div>
-            </td>
-            <td>
-                <div><?php echo ($ttl == -1) ? 'does not expire' : $ttl ?>
-                    <?php if ($server['mode'] !== 'read-only'): ?>
-                    <a href="<?php echo sprintf('ttl.php?s=%s&amp;key=%s&amp;ttl=%s', $server['id'], urlencode($_GET['key']), $ttl); ?>">
-                        <img src="images/edit.png" width="16" height="16" title="Edit TTL" alt="[E]" class="imgbut">
-                    </a>
-                    <?php endif; ?>
-                </div>
-            </td>
-        </tr>
+<tr><td><div><abbr title="Time To Live">TTL</abbr>:</div></td><td>
+<div><?php echo ($ttl == -1) ? 'does not expire' : $ttl?>
+<?php if ( !$server['is_read_only']): ?>
+<a href="ttl.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;key=<?php echo urlencode($_GET['key'])?>&amp;ttl=<?php echo $ttl?>">
+<img src="images/edit.png" width="16" height="16" title="Edit TTL" alt="[E]" class="imgbut">
+</a>
+<?php endif; ?>
+</div>
+</td></tr>
 
-        <?php if (!is_null($encoding)) { ?>
-            <tr>
-                <td>
-                    <div>Encoding:</div>
-                </td>
-                <td>
-                    <div><?php echo format_html($encoding) ?></div>
-                </td>
-            </tr>
-        <?php } ?>
+<?php if (!is_null($encoding)) { ?>
+<tr><td><div>Encoding:</div></td><td><div><?php echo format_html($encoding)?></div></td></tr>
+<?php } ?>
 
-        <tr>
-            <td>
-                <div>Size:</div>
-            </td>
-            <td>
-                <div><?php echo $size ?> <?php echo ($type == 'string') ? 'characters' : 'items' ?></div>
-            </td>
-        </tr>
+<tr><td><div>Size:</div></td><td><div><?php echo $size?> <?php echo ($type == 'string') ? 'characters' : 'items'?></div></td></tr>
 
-    </table>
+</table>
 
 <p>
 <?php
@@ -137,13 +131,13 @@ if (isset($values) && ($count_elements_page !== false)) {
 
 // Build pagination div.
 if (($count_elements_page !== false) && in_array($type, array('hash', 'list', 'set', 'zset')) && ($size > $count_elements_page)) {
-    $prev = $page_num_request - 1;
-    $next = $page_num_request + 1;
-    $lastpage = ceil($size / $count_elements_page);
-    $lpm1 = $lastpage - 1;
-    $adjacents = 3;
+    $prev       = $page_num_request - 1;
+    $next       = $page_num_request + 1;
+    $lastpage   = ceil($size / $count_elements_page);
+    $lpm1       = $lastpage - 1;
+    $adjacents  = 3;
     $pagination = '<div style="width: inherit; word-wrap: break-word;">';
-    $url = preg_replace('/&page=(\d+)/i', '', $_SERVER['REQUEST_URI']);
+    $url        = preg_replace('/&page=(\d+)/i', '', $_SERVER['REQUEST_URI']);
 
     if ($page_num_request > 1) $pagination .= "<a href=\"$url&page=$prev\">&#8592;</a>&nbsp;"; else
         $pagination .= "&#8592;&nbsp;";
@@ -195,237 +189,121 @@ if (isset($pagination)) {
 
 
 // String
-if ($type == 'string') {
-    ?>
+if ($type == 'string') { ?>
 
-    <table>
-        <tr>
-            <td>
-                <div>Value:</div>
-            </td>
-            <td>
-                <div><?php echo nl2br(format_html($value)) ?></div>
-            </td>
-            <?php if ($server['mode'] !== 'read-only'): ?>
-            <td>
-                <div>
-                    <a href="<?php echo sprintf('edit.php?s=%s&amp;type=string&amp;key=%s', $server['id'], urlencode($_GET['key'])); ?>">
-                        <img src="images/edit.png" width="16" height="16" title="Edit" alt="[E]">
-                    </a>
-                </div>
-            </td>
-            <td>
-                <div>
-                    <a href="delete.php?s=<?php echo $server['id'] ?>&amp;type=string&amp;key=<?php echo urlencode($_GET['key']) ?>"
-                       class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
-                </div>
-            </td>
-            <?php endif; ?>
-        </tr>
-    </table>
+<table>
+<tr><td><div class=data><?php echo format_html($value)?></div></td>
+<?php if (!$server['is_read_only']) :?>
+<td><div>
+  <a href="edit.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=string&amp;key=<?php echo urlencode($_GET['key'])?>"><img src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
+</div></td>
+<td><div>
+  <a href="delete.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=string&amp;key=<?php echo urlencode($_GET['key'])?>" class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
+</div></td>
+<?php endif; ?>
+</tr>
+</table>
 
-<?php
-} // Hash
-else if ($type == 'hash') {
-    ?>
+<?php }
 
-    <table>
-    <tr>
-        <th>
-            <div>Key</div>
-        </th>
-        <th>
-            <div>Value</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-    </tr>
 
-    <?php foreach ($values as $hkey => $value) { ?>
-        <tr <?php echo $alt ? 'class="alt"' : '' ?>>
-            <td>
-                <div><?php echo format_html($hkey) ?></div>
-            </td>
-            <td>
-                <div><?php echo nl2br(format_html($value)) ?></div>
-            </td>
-            <td>
-                <div>
-                    <a href="edit.php?s=<?php echo $server['id'] ?>&amp;type=hash&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;hkey=<?php echo urlencode($hkey) ?>"><img
-                            src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
-                </div>
-            </td>
-            <td>
-                <div>
-                    <a href="delete.php?s=<?php echo $server['id'] ?>&amp;type=hash&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;hkey=<?php echo urlencode($hkey) ?>"
-                       class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
-                </div>
-            </td>
-        </tr>
-        <?php $alt = !$alt;
-    } ?>
 
-<?php
-} // List
-else if ($type == 'list') {
-    ?>
+// Hash
+else if ($type == 'hash') { ?>
 
-    <table>
-    <tr>
-        <th>
-            <div>Index</div>
-        </th>
-        <th>
-            <div>Value</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-    </tr>
+<table>
+<tr><th><div>Key</div></th><th><div>Value</div></th><th><div>&nbsp;</div></th><th><div>&nbsp;</div></th></tr>
 
-    <?php
-    if (($count_elements_page === false) && ($size > $count_elements_page)) {
-        $start = 0;
-        $end = $size;
-    } else {
-        $start = $count_elements_page * ($page_num_request - 1);
-        $end = min($start + $count_elements_page, $size);
-    }
+<?php foreach ($values as $hkey => $value) { ?>
+  <tr <?php echo $alt ? 'class="alt"' : ''?>><td><div><?php echo format_html($hkey)?></div></td><td><div class=data><?php echo format_html($value)?></div></td><td><div>
+    <a href="edit.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=hash&amp;key=<?php echo urlencode($_GET['key'])?>&amp;hkey=<?php echo urlencode($hkey)?>"><img src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
+  </div></td><td><div>
+    <a href="delete.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=hash&amp;key=<?php echo urlencode($_GET['key'])?>&amp;hkey=<?php echo urlencode($hkey)?>" class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
+  </div></td></tr>
+<?php $alt = !$alt; } ?>
 
-    for ($i = $start; $i < $end; ++$i) {
-        $value = $redis->lIndex($_GET['key'], $i);
-        ?>
-        <tr <?php echo $alt ? 'class="alt"' : '' ?>>
-            <td>
-                <div><?php echo $i ?></div>
-            </td>
-            <td>
-                <div><?php echo nl2br(format_html($value)) ?></div>
-            </td>
-            <td>
-                <div>
-                    <a href="edit.php?s=<?php echo $server['id'] ?>&amp;type=list&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;index=<?php echo $i ?>"><img
-                            src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
-                </div>
-            </td>
-            <td>
-                <div>
-                    <a href="delete.php?s=<?php echo $server['id'] ?>&amp;type=list&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;index=<?php echo $i ?>"
-                       class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
-                </div>
-            </td>
-        </tr>
-        <?php $alt = !$alt;
-    } ?>
+<?php }
 
-<?php
-} // Set
+
+// List
+else if ($type == 'list') { ?>
+
+<table>
+<tr><th><div>Index</div></th><th><div>Value</div></th><th><div>&nbsp;</div></th><th><div>&nbsp;</div></th></tr>
+
+<?php 
+  if (($count_elements_page === false) && ($size > $count_elements_page)) {
+    $start = 0;
+    $end   = $size;
+  } else {
+    $start = $count_elements_page * ($page_num_request - 1);
+    $end   = min($start + $count_elements_page, $size);
+  }
+
+  for ($i = $start; $i < $end; ++$i) {
+    $value = $redis->lIndex($_GET['key'], $i);
+    $value = encodeOrDecode('load', $_GET['key'], $value);
+?>
+  <tr <?php echo $alt ? 'class="alt"' : ''?>><td><div><?php echo $i?></div></td><td><div class=data><?php echo format_html($value)?></div></td><td><div>
+    <a href="edit.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=list&amp;key=<?php echo urlencode($_GET['key'])?>&amp;index=<?php echo $i?>"><img src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
+  </div></td><td><div>
+    <a href="delete.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=list&amp;key=<?php echo urlencode($_GET['key'])?>&amp;index=<?php echo $i?>" class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
+  </div></td></tr>
+<?php $alt = !$alt; } ?>
+
+<?php }
+
+
+
+// Set
 else if ($type == 'set') {
 
-    ?>
-    <table>
-    <tr>
-        <th>
-            <div>Value</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-    </tr>
+?>
+<table>
+<tr><th><div>Value</div></th><th><div>&nbsp;</div></th><th><div>&nbsp;</div></th></tr>
 
-    <?php foreach ($values as $value) {
-        $display_value = $redis->exists($value) ? '<a href="view.php?s=' . $server['id'] . '&key=' . urlencode($value) . '">' . nl2br(format_html($value)) . '</a>' : nl2br(format_html($value));
-        ?>
-        <tr <?php echo $alt ? 'class="alt"' : '' ?>>
-            <td>
-                <div><?php echo $display_value ?></div>
-            </td>
-            <td>
-                <div>
-                    <a href="edit.php?s=<?php echo $server['id'] ?>&amp;type=set&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;value=<?php echo urlencode($value) ?>"><img
-                            src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
-                </div>
-            </td>
-            <td>
-                <div>
-                    <a href="delete.php?s=<?php echo $server['id'] ?>&amp;type=set&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;value=<?php echo urlencode($value) ?>"
-                       class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
-                </div>
-            </td>
-        </tr>
-        <?php $alt = !$alt;
-    } ?>
+<?php foreach ($values as $value) {
+  $display_value = $redis->exists($value) ? '<a href="view.php?s='.$server['id'].'&d='.$server['db'].'&key='.urlencode($value).'">'.format_html($value).'</a>' : format_html($value);
+?>
+  <tr <?php echo $alt ? 'class="alt"' : ''?>><td><div class=data><?php echo $display_value ?></div></td><td><div>
+    <a href="edit.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=set&amp;key=<?php echo urlencode($_GET['key'])?>&amp;value=<?php echo urlencode($value)?>"><img src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
+  </div></td><td><div>
+    <a href="delete.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=set&amp;key=<?php echo urlencode($_GET['key'])?>&amp;value=<?php echo urlencode($value)?>" class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
+  </div></td></tr>
+<?php $alt = !$alt; } ?>
 
-<?php
-} // ZSet
-else if ($type == 'zset') {
-    ?>
+<?php }
 
-    <table>
-    <tr>
-        <th>
-            <div>Score</div>
-        </th>
-        <th>
-            <div>Value</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-        <th>
-            <div>&nbsp;</div>
-        </th>
-    </tr>
 
-    <?php foreach ($values as $value) {
-        $score = $redis->zScore($_GET['key'], $value);
-        $display_value = $redis->exists($value) ? '<a href="view.php?s=' . $server['id'] . '&key=' . urlencode($value) . '">' . nl2br(format_html($value)) . '</a>' : nl2br(format_html($value));
-        ?>
-        <tr <?php echo $alt ? 'class="alt"' : '' ?>>
-            <td>
-                <div><?php echo $score ?></div>
-            </td>
-            <td>
-                <div><?php echo $display_value ?></div>
-            </td>
-            <td>
-                <div>
-                    <a href="edit.php?s=<?php echo $server['id'] ?>&amp;type=zset&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;score=<?php echo $score ?>&amp;value=<?php echo urlencode($value) ?>"><img
-                            src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
-                    <a href="delete.php?s=<?php echo $server['id'] ?>&amp;type=zset&amp;key=<?php echo urlencode($_GET['key']) ?>&amp;value=<?php echo urlencode($value) ?>"
-                       class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
-                </div>
-            </td>
-        </tr>
-        <?php $alt = !$alt;
-    } ?>
 
-<?php
-}
+// ZSet
+else if ($type == 'zset') { ?>
 
-if ($type != 'string') {
-    ?>
-    </table>
+<table>
+<tr><th><div>Score</div></th><th><div>Value</div></th><th><div>&nbsp;</div></th><th><div>&nbsp;</div></th></tr>
 
-    <p>
-        <a href="edit.php?s=<?php echo $server['id'] ?>&amp;type=<?php echo $type ?>&amp;key=<?php echo urlencode($_GET['key']) ?>"
-           class="add">Add another value</a>
-    </p>
-<?php
-}
+<?php foreach ($values as $value) {
+  $score         = $redis->zScore($_GET['key'], $value);
+  $display_value = $redis->exists($value) ? '<a href="view.php?s='.$server['id'].'&d='.$server['db'].'&key='.urlencode($value).'">'.format_html($value).'</a>' : format_html($value);
+?>
+  <tr <?php echo $alt ? 'class="alt"' : ''?>><td><div><?php echo $score?></div></td><td><div class=data><?php echo $display_value ?></div></td><td><div>
+    <a href="edit.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=zset&amp;key=<?php echo urlencode($_GET['key'])?>&amp;score=<?php echo $score?>&amp;value=<?php echo urlencode($value)?>"><img src="images/edit.png" width="16" height="16" title="Edit" alt="[E]"></a>
+    <a href="delete.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=zset&amp;key=<?php echo urlencode($_GET['key'])?>&amp;value=<?php echo urlencode($value)?>" class="delval"><img src="images/delete.png" width="16" height="16" title="Delete" alt="[X]"></a>
+  </div></td></tr>
+<?php $alt = !$alt; } ?>
+
+<?php }
+
+if ($type != 'string') { ?>
+  </table>
+
+  <p>
+  <a href="edit.php?s=<?php echo $server['id']?>&amp;d=<?php echo $server['db']?>&amp;type=<?php echo $type?>&amp;key=<?php echo urlencode($_GET['key'])?>" class="add">Add another value</a>
+  </p>
+<?php }
 
 if (isset($pagination)) {
-    echo $pagination;
+  echo $pagination;
 }
 
 require 'includes/footer.inc.php';
